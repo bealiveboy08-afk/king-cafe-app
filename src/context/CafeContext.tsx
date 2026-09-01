@@ -91,11 +91,29 @@ const detectRoleFromLocation = (): Role => {
     const path = window.location.pathname.toLowerCase().replace(/\/+$/, '');
     const urlParams = new URLSearchParams(window.location.search);
     const viewParam = urlParams.get('view')?.toLowerCase();
+    const hash = window.location.hash.toLowerCase();
 
-    if (path === '/owner' || viewParam === 'owner') {
+    if (
+      path === '/owner' ||
+      path.startsWith('/owner/') ||
+      viewParam === 'owner' ||
+      hash === '#/owner' ||
+      hash === '#owner'
+    ) {
       return 'owner';
     }
-    if (path === '/admin' || path === '/superadmin' || viewParam === 'admin' || viewParam === 'superadmin') {
+    if (
+      path === '/admin' ||
+      path.startsWith('/admin/') ||
+      path === '/superadmin' ||
+      path.startsWith('/superadmin/') ||
+      viewParam === 'admin' ||
+      viewParam === 'superadmin' ||
+      hash === '#/admin' ||
+      hash === '#admin' ||
+      hash === '#/superadmin' ||
+      hash === '#superadmin'
+    ) {
       return 'superadmin';
     }
     return 'customer';
