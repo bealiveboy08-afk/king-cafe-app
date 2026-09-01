@@ -1,0 +1,6 @@
+{
+  "name": "King Cafe SaaS - Multi-Tenant Cafe Ordering Platform",
+  "description": "Multi-tenant digital QR cafe ordering platform with real-time customer ordering, King Cafe owner live kitchen management & Super Admin 10% commission ledger.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
