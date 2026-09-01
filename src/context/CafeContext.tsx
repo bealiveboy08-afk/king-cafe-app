@@ -1,0 +1,655 @@
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
+import confetti from 'canvas-confetti';
+import {
+  Role,
+  Cafe,
+  MenuItem,
+  CartItem,
+  Order,
+  OrderStatus,
+  PlatformLedgerSummary,
+} from '../types';
+import { INITIAL_CAFES, INITIAL_MENU_ITEMS, INITIAL_ORDERS } from '../data/initialData';
+import { playNotificationSound } from '../utils/audio';
+
+interface CustomerSession {
+  name: string;
+  tableNumber: number | null;
+}
+
+interface CafeContextType {
+  // Navigation & Role
+  role: Role;
+  setRole: (role: Role) => void;
+  soundEnabled: boolean;
+  setSoundEnabled: (enabled: boolean) => void;
+
+  // Active Cafe & Multi-tenant data
+  cafes: Cafe[];
+  activeCafe: Cafe;
+  setActiveCafeId: (id: string) => void;
+  addCafe: (cafe: Omit<Cafe, 'id'>) => void;
+
+  // Menu items
+  menuItems: MenuItem[];
+  toggleItemAvailability: (itemId: string) => void;
+  updateMenuItemPrice: (itemId: string, newPrice: number) => void;
+
+  // Customer State
+  customerSession: CustomerSession;
+  setCustomerSession: (session: CustomerSession) => void;
+  cart: CartItem[];
+  addToCart: (item: MenuItem, quantity?: number, notes?: string) => void;
+  updateCartQuantity: (itemId: string, delta: number) => void;
+  removeFromCart: (itemId: string) => void;
+  clearCart: () => void;
+  cartTotal: number;
+  cartItemCount: number;
+
+  // Customer Active Order & Status
+  customerActiveOrderId: string | null;
+  setCustomerActiveOrderId: (orderId: string | null) => void;
+  activeCustomerOrder: Order | null;
+  submitOrder: (specialInstructions?: string) => Order | null;
+
+  // Orders Management (Owner & Admin)
+  orders: Order[];
+  approveOrder: (orderId: string) => void;
+  markDelivered: (orderId: string) => void;
+  confirmPayment: (orderId: string, paymentMethod?: 'cash' | 'upi' | 'card' | 'counter') => void;
+  cancelOrder: (orderId: string) => void;
+
+  // Authentication State
+  isOwnerLoggedIn: boolean;
+  loginOwner: (user: string, pass: string) => boolean;
+  logoutOwner: () => void;
+
+  isAdminLoggedIn: boolean;
+  loginAdmin: (user: string, pass: string) => boolean;
+  logoutAdmin: () => void;
+
+  // Analytics & Commission
+  ledgerSummary: PlatformLedgerSummary;
+  resetDemoData: () => void;
+}
+
+const CafeContext = createContext<CafeContextType | null>(null);
+
+const STORAGE_KEYS = {
+  CAFES: 'kingcafe_cafes_v2',
+  MENU: 'kingcafe_menu_v2',
+  ORDERS: 'kingcafe_orders_v2',
+  CUSTOMER: 'kingcafe_customer_v2',
+  ACTIVE_ORDER_ID: 'kingcafe_active_order_id_v2',
+  OWNER_AUTH: 'kingcafe_owner_auth_v2',
+  ADMIN_AUTH: 'kingcafe_admin_auth_v2',
+  SOUND: 'kingcafe_sound_v2',
+};
+
+const detectRoleFromLocation = (): Role => {
+  try {
+    const path = window.location.pathname.toLowerCase().replace(/\/+$/, '');
+    const urlParams = new URLSearchParams(window.location.search);
+    const viewParam = urlParams.get('view')?.toLowerCase();
+
+    if (path === '/owner' || viewParam === 'owner') {
+      return 'owner';
+    }
+    if (path === '/admin' || path === '/superadmin' || viewParam === 'admin' || viewParam === 'superadmin') {
+      return 'superadmin';
+    }
+    return 'customer';
+  } catch {
+    return 'customer';
+  }
+};
+
+export const CafeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  // Sync role state from pathname (/owner, /admin) or search query (?view=owner, ?view=admin)
+  const [role, setRoleState] = useState<Role>(() => detectRoleFromLocation());
+
+  const [soundEnabled, setSoundEnabled] = useState<boolean>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.SOUND);
+    return saved !== null ? JSON.parse(saved) : true;
+  });
+
+  const [cafes, setCafes] = useState<Cafe[]>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.CAFES);
+    return saved ? JSON.parse(saved) : INITIAL_CAFES;
+  });
+
+  const [activeCafeId, setActiveCafeId] = useState<string>('cafe-king-01');
+
+  const [menuItems, setMenuItems] = useState<MenuItem[]>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.MENU);
+    return saved ? JSON.parse(saved) : INITIAL_MENU_ITEMS;
+  });
+
+  const [orders, setOrders] = useState<Order[]>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.ORDERS);
+    return saved ? JSON.parse(saved) : INITIAL_ORDERS;
+  });
+
+  const [customerSession, setCustomerSessionState] = useState<CustomerSession>(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const tableParam = urlParams.get('table');
+    const nameParam = urlParams.get('name');
+
+    const saved = localStorage.getItem(STORAGE_KEYS.CUSTOMER);
+    const parsed = saved ? JSON.parse(saved) : { name: '', tableNumber: null };
+
+    return {
+      name: nameParam || parsed.name || '',
+      tableNumber: tableParam ? parseInt(tableParam, 10) : parsed.tableNumber || null,
+    };
+  });
+
+  const [customerActiveOrderId, setCustomerActiveOrderIdState] = useState<string | null>(() => {
+    return localStorage.getItem(STORAGE_KEYS.ACTIVE_ORDER_ID) || null;
+  });
+
+  const [cart, setCart] = useState<CartItem[]>([]);
+
+  const [isOwnerLoggedIn, setIsOwnerLoggedIn] = useState<boolean>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.OWNER_AUTH);
+    return saved === 'true';
+  });
+
+  const [isAdminLoggedIn, setIsAdminLoggedIn] = useState<boolean>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.ADMIN_AUTH);
+    return saved === 'true';
+  });
+
+  // Cross-tab Synchronization & Location/URL changes
+  useEffect(() => {
+    const handleLocationChange = () => {
+      setRoleState(detectRoleFromLocation());
+    };
+    window.addEventListener('popstate', handleLocationChange);
+
+    let channel: BroadcastChannel | null = null;
+    try {
+      channel = new BroadcastChannel('king_cafe_sync');
+      channel.onmessage = (event) => {
+        if (event.data?.type === 'ORDERS_UPDATED') {
+          setOrders(event.data.payload);
+        } else if (event.data?.type === 'MENU_UPDATED') {
+          setMenuItems(event.data.payload);
+        } else if (event.data?.type === 'CAFES_UPDATED') {
+          setCafes(event.data.payload);
+        }
+      };
+    } catch {
+      // BroadcastChannel not available in all sandbox environments
+    }
+
+    return () => {
+      window.removeEventListener('popstate', handleLocationChange);
+      channel?.close();
+    };
+  }, []);
+
+  // Save changes to localStorage and broadcast
+  const persistOrders = useCallback((newOrders: Order[]) => {
+    setOrders(newOrders);
+    try {
+      localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(newOrders));
+      const channel = new BroadcastChannel('king_cafe_sync');
+      channel.postMessage({ type: 'ORDERS_UPDATED', payload: newOrders });
+      channel.close();
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const persistMenu = useCallback((newMenu: MenuItem[]) => {
+    setMenuItems(newMenu);
+    try {
+      localStorage.setItem(STORAGE_KEYS.MENU, JSON.stringify(newMenu));
+      const channel = new BroadcastChannel('king_cafe_sync');
+      channel.postMessage({ type: 'MENU_UPDATED', payload: newMenu });
+      channel.close();
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const persistCafes = useCallback((newCafes: Cafe[]) => {
+    setCafes(newCafes);
+    try {
+      localStorage.setItem(STORAGE_KEYS.CAFES, JSON.stringify(newCafes));
+      const channel = new BroadcastChannel('king_cafe_sync');
+      channel.postMessage({ type: 'CAFES_UPDATED', payload: newCafes });
+      channel.close();
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  // Customer session persistence
+  const setCustomerSession = useCallback((session: CustomerSession) => {
+    setCustomerSessionState(session);
+    try {
+      localStorage.setItem(STORAGE_KEYS.CUSTOMER, JSON.stringify(session));
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const setCustomerActiveOrderId = useCallback((orderId: string | null) => {
+    setCustomerActiveOrderIdState(orderId);
+    try {
+      if (orderId) {
+        localStorage.setItem(STORAGE_KEYS.ACTIVE_ORDER_ID, orderId);
+      } else {
+        localStorage.removeItem(STORAGE_KEYS.ACTIVE_ORDER_ID);
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const setRole = useCallback((newRole: Role) => {
+    setRoleState(newRole);
+    // Update URL pathname / query cleanly
+    try {
+      const url = new URL(window.location.href);
+      if (newRole === 'customer') {
+        if (url.pathname === '/owner' || url.pathname === '/admin' || url.pathname === '/superadmin') {
+          url.pathname = '/';
+        }
+        url.searchParams.delete('view');
+      } else if (newRole === 'owner') {
+        if (url.pathname === '/admin' || url.pathname === '/superadmin') {
+          url.pathname = '/owner';
+        } else if (url.pathname !== '/owner') {
+          url.searchParams.set('view', 'owner');
+        }
+      } else if (newRole === 'superadmin') {
+        if (url.pathname === '/owner') {
+          url.pathname = '/admin';
+        } else if (url.pathname !== '/admin') {
+          url.searchParams.set('view', 'admin');
+        }
+      }
+      window.history.pushState({}, '', url.toString());
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  // Active Cafe object
+  const activeCafe = useMemo(() => {
+    return cafes.find((c) => c.id === activeCafeId) || cafes[0] || INITIAL_CAFES[0];
+  }, [cafes, activeCafeId]);
+
+  // Cart operations
+  const addToCart = useCallback((item: MenuItem, quantity = 1, notes?: string) => {
+    setCart((prev) => {
+      const existingIndex = prev.findIndex((ci) => ci.menuItem.id === item.id);
+      if (existingIndex > -1) {
+        const updated = [...prev];
+        updated[existingIndex] = {
+          ...updated[existingIndex],
+          quantity: updated[existingIndex].quantity + quantity,
+          customizationNotes: notes || updated[existingIndex].customizationNotes,
+        };
+        return updated;
+      }
+      return [...prev, { menuItem: item, quantity, customizationNotes: notes }];
+    });
+  }, []);
+
+  const updateCartQuantity = useCallback((itemId: string, delta: number) => {
+    setCart((prev) => {
+      return prev
+        .map((item) => {
+          if (item.menuItem.id === itemId) {
+            const newQty = item.quantity + delta;
+            return newQty > 0 ? { ...item, quantity: newQty } : null;
+          }
+          return item;
+        })
+        .filter(Boolean) as CartItem[];
+    });
+  }, []);
+
+  const removeFromCart = useCallback((itemId: string) => {
+    setCart((prev) => prev.filter((item) => item.menuItem.id !== itemId));
+  }, []);
+
+  const clearCart = useCallback(() => {
+    setCart([]);
+  }, []);
+
+  const cartTotal = useMemo(() => {
+    return cart.reduce((sum, item) => sum + item.menuItem.price * item.quantity, 0);
+  }, [cart]);
+
+  const cartItemCount = useMemo(() => {
+    return cart.reduce((sum, item) => sum + item.quantity, 0);
+  }, [cart]);
+
+  // Submit Order from Customer Screen
+  const submitOrder = useCallback(
+    (specialInstructions?: string): Order | null => {
+      if (cart.length === 0 || !customerSession.tableNumber) return null;
+
+      const subtotal = cartTotal;
+      const tax = Math.round(subtotal * 0.05 * 100) / 100; // 5% GST
+      const totalAmount = Math.round((subtotal + tax) * 100) / 100;
+      const commissionRate = activeCafe.commissionRate || 0.10;
+      const commissionAmount = Math.round(totalAmount * commissionRate * 100) / 100;
+
+      const orderNumber = `KC-${Math.floor(1000 + Math.random() * 9000)}`;
+      const newOrder: Order = {
+        id: `ord-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+        orderNumber,
+        cafeId: activeCafe.id,
+        cafeName: activeCafe.name,
+        tableNumber: customerSession.tableNumber,
+        customerName: customerSession.name.trim() || `Guest (Table ${customerSession.tableNumber})`,
+        items: [...cart],
+        subtotal,
+        tax,
+        totalAmount,
+        commissionAmount,
+        status: 'order_sent',
+        statusTimestamps: {
+          sent: new Date().toISOString(),
+        },
+        specialInstructions,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      const updatedOrders = [newOrder, ...orders];
+      persistOrders(updatedOrders);
+      setCustomerActiveOrderId(newOrder.id);
+      clearCart();
+
+      if (soundEnabled) {
+        playNotificationSound('new_order');
+      }
+
+      return newOrder;
+    },
+    [
+      cart,
+      customerSession,
+      cartTotal,
+      activeCafe,
+      orders,
+      persistOrders,
+      setCustomerActiveOrderId,
+      clearCart,
+      soundEnabled,
+    ]
+  );
+
+  // Active Customer Order Tracker
+  const activeCustomerOrder = useMemo(() => {
+    if (!customerActiveOrderId) {
+      // Find latest pending/active order for this table if any
+      if (customerSession.tableNumber) {
+        const tableOrder = orders.find(
+          (o) =>
+            o.tableNumber === customerSession.tableNumber &&
+            o.cafeId === activeCafe.id &&
+            o.status !== 'cancelled'
+        );
+        return tableOrder || null;
+      }
+      return null;
+    }
+    return orders.find((o) => o.id === customerActiveOrderId) || null;
+  }, [customerActiveOrderId, orders, customerSession.tableNumber, activeCafe.id]);
+
+  // King Cafe Owner Action Handlers
+  const approveOrder = useCallback(
+    (orderId: string) => {
+      const updated = orders.map((o) => {
+        if (o.id === orderId) {
+          return {
+            ...o,
+            status: 'approved_preparing' as OrderStatus,
+            statusTimestamps: {
+              ...o.statusTimestamps,
+              approved: new Date().toISOString(),
+            },
+            updatedAt: new Date().toISOString(),
+          };
+        }
+        return o;
+      });
+      persistOrders(updated);
+      if (soundEnabled) {
+        playNotificationSound('approved');
+      }
+    },
+    [orders, persistOrders, soundEnabled]
+  );
+
+  const markDelivered = useCallback(
+    (orderId: string) => {
+      const updated = orders.map((o) => {
+        if (o.id === orderId) {
+          return {
+            ...o,
+            status: 'delivered_served' as OrderStatus,
+            statusTimestamps: {
+              ...o.statusTimestamps,
+              delivered: new Date().toISOString(),
+            },
+            updatedAt: new Date().toISOString(),
+          };
+        }
+        return o;
+      });
+      persistOrders(updated);
+      if (soundEnabled) {
+        playNotificationSound('delivered');
+      }
+    },
+    [orders, persistOrders, soundEnabled]
+  );
+
+  const confirmPayment = useCallback(
+    (orderId: string, paymentMethod: 'cash' | 'upi' | 'card' | 'counter' = 'counter') => {
+      const updated = orders.map((o) => {
+        if (o.id === orderId) {
+          return {
+            ...o,
+            status: 'payment_confirmed' as OrderStatus,
+            paymentMethod,
+            statusTimestamps: {
+              ...o.statusTimestamps,
+              paid: new Date().toISOString(),
+            },
+            updatedAt: new Date().toISOString(),
+          };
+        }
+        return o;
+      });
+      persistOrders(updated);
+
+      if (soundEnabled) {
+        playNotificationSound('paid');
+      }
+
+      // Celebratory Confetti
+      try {
+        confetti({
+          particleCount: 80,
+          spread: 70,
+          origin: { y: 0.6 },
+          colors: ['#10B981', '#F59E0B', '#3B82F6', '#8B5CF6'],
+        });
+      } catch {
+        // ignore
+      }
+    },
+    [orders, persistOrders, soundEnabled]
+  );
+
+  const cancelOrder = useCallback(
+    (orderId: string) => {
+      const updated = orders.map((o) => {
+        if (o.id === orderId) {
+          return {
+            ...o,
+            status: 'cancelled' as OrderStatus,
+            updatedAt: new Date().toISOString(),
+          };
+        }
+        return o;
+      });
+      persistOrders(updated);
+    },
+    [orders, persistOrders]
+  );
+
+  // Menu item modification
+  const toggleItemAvailability = useCallback(
+    (itemId: string) => {
+      const updated = menuItems.map((item) =>
+        item.id === itemId ? { ...item, isAvailable: !item.isAvailable } : item
+      );
+      persistMenu(updated);
+    },
+    [menuItems, persistMenu]
+  );
+
+  const updateMenuItemPrice = useCallback(
+    (itemId: string, newPrice: number) => {
+      const updated = menuItems.map((item) =>
+        item.id === itemId ? { ...item, price: Math.max(1, newPrice) } : item
+      );
+      persistMenu(updated);
+    },
+    [menuItems, persistMenu]
+  );
+
+  // Cafe management for Super Admin
+  const addCafe = useCallback(
+    (cafeData: Omit<Cafe, 'id'>) => {
+      const newCafe: Cafe = {
+        ...cafeData,
+        id: `cafe-${Date.now()}`,
+      };
+      const updated = [...cafes, newCafe];
+      persistCafes(updated);
+    },
+    [cafes, persistCafes]
+  );
+
+  // Authentication Handlers
+  const loginOwner = useCallback((user: string, pass: string): boolean => {
+    // Standard King Cafe owner credentials
+    if ((user.trim().toLowerCase() === 'kingcafe' || user.trim().toLowerCase() === 'owner') && pass === 'king123') {
+      setIsOwnerLoggedIn(true);
+      localStorage.setItem(STORAGE_KEYS.OWNER_AUTH, 'true');
+      return true;
+    }
+    return false;
+  }, []);
+
+  const logoutOwner = useCallback(() => {
+    setIsOwnerLoggedIn(false);
+    localStorage.removeItem(STORAGE_KEYS.OWNER_AUTH);
+  }, []);
+
+  const loginAdmin = useCallback((user: string, pass: string): boolean => {
+    if ((user.trim().toLowerCase() === 'admin' || user.trim().toLowerCase() === 'superadmin') && pass === 'admin123') {
+      setIsAdminLoggedIn(true);
+      localStorage.setItem(STORAGE_KEYS.ADMIN_AUTH, 'true');
+      return true;
+    }
+    return false;
+  }, []);
+
+  const logoutAdmin = useCallback(() => {
+    setIsAdminLoggedIn(false);
+    localStorage.removeItem(STORAGE_KEYS.ADMIN_AUTH);
+  }, []);
+
+  // Super Admin Platform Ledger & Commission Calculation
+  const ledgerSummary = useMemo<PlatformLedgerSummary>(() => {
+    const validOrders = orders.filter((o) => o.status !== 'cancelled');
+    const totalRevenue = validOrders.reduce((sum, o) => sum + o.totalAmount, 0);
+    // 1% Commission across all orders
+    const totalCommission = validOrders.reduce((sum, o) => sum + o.commissionAmount, 0);
+
+    return {
+      totalRevenue: Math.round(totalRevenue * 100) / 100,
+      totalOrders: validOrders.length,
+      totalCommission: Math.round(totalCommission * 100) / 100,
+      pendingOrdersCount: orders.filter((o) => o.status === 'order_sent').length,
+      preparingOrdersCount: orders.filter((o) => o.status === 'approved_preparing').length,
+      deliveredOrdersCount: orders.filter((o) => o.status === 'delivered_served').length,
+      paidOrdersCount: orders.filter((o) => o.status === 'payment_confirmed').length,
+    };
+  }, [orders]);
+
+  const resetDemoData = useCallback(() => {
+    persistOrders(INITIAL_ORDERS);
+    persistMenu(INITIAL_MENU_ITEMS);
+    persistCafes(INITIAL_CAFES);
+    setCustomerActiveOrderId(null);
+    clearCart();
+  }, [persistOrders, persistMenu, persistCafes, setCustomerActiveOrderId, clearCart]);
+
+  return (
+    <CafeContext.Provider
+      value={{
+        role,
+        setRole,
+        soundEnabled,
+        setSoundEnabled,
+        cafes,
+        activeCafe,
+        setActiveCafeId,
+        addCafe,
+        menuItems,
+        toggleItemAvailability,
+        updateMenuItemPrice,
+        customerSession,
+        setCustomerSession,
+        cart,
+        addToCart,
+        updateCartQuantity,
+        removeFromCart,
+        clearCart,
+        cartTotal,
+        cartItemCount,
+        customerActiveOrderId,
+        setCustomerActiveOrderId,
+        activeCustomerOrder,
+        submitOrder,
+        orders,
+        approveOrder,
+        markDelivered,
+        confirmPayment,
+        cancelOrder,
+        isOwnerLoggedIn,
+        loginOwner,
+        logoutOwner,
+        isAdminLoggedIn,
+        loginAdmin,
+        logoutAdmin,
+        ledgerSummary,
+        resetDemoData,
+      }}
+    >
+      {children}
+    </CafeContext.Provider>
+  );
+};
+
+export const useCafe = () => {
+  const context = useContext(CafeContext);
+  if (!context) {
+    throw new Error('useCafe must be used within a CafeProvider');
+  }
+  return context;
+};
