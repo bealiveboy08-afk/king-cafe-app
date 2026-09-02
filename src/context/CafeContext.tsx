@@ -175,15 +175,21 @@ export const CafeProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const parsed = parseInt(tableParam, 10);
         if (!isNaN(parsed)) tableNum = parsed;
       }
-      if (nameParam) name = nameParam;
+      if (nameParam && nameParam !== 'Sneha' && nameParam !== 'Sneha Kapoor') {
+        name = nameParam;
+      }
     } catch {}
 
     const saved = localStorage.getItem(STORAGE_KEYS.CUSTOMER);
     const parsed = saved ? JSON.parse(saved) : { name: '', tableNumber: null };
+    let savedName = parsed?.name || '';
+    if (savedName === 'Sneha' || savedName === 'Sneha Kapoor' || savedName.startsWith('Guest (Table') || savedName.startsWith('Guest')) {
+      savedName = '';
+    }
 
     return {
-      name: name || parsed.name || '',
-      tableNumber: tableNum !== null ? tableNum : (parsed.tableNumber || 1),
+      name: name || savedName || '',
+      tableNumber: tableNum !== null ? tableNum : (parsed?.tableNumber || 1),
     };
   });
 
@@ -524,7 +530,7 @@ export const CafeProvider: React.FC<{ children: React.ReactNode }> = ({ children
     (
       specialInstructions?: string,
       customerRealName?: string,
-      staffVerificationCode?: string
+      _optionalCode?: string
     ): Order | null => {
       // Determine table number from session or fallback to URL parameter
       let tableNum = customerSession.tableNumber;
@@ -552,7 +558,9 @@ export const CafeProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const commissionAmount = saasCommission;
 
       const cleanName = (customerRealName || customerSession.name || '').trim();
-      const code = (staffVerificationCode || '').trim();
+
+      // Generate random 4-digit code (e.g. 1000 - 9999) for staff to give to table
+      const generatedVerificationCode = String(Math.floor(1000 + Math.random() * 9000));
 
       const now = new Date().toISOString();
       const orderNumber = `KC-${Math.floor(1000 + Math.random() * 9000)}`;
@@ -562,7 +570,7 @@ export const CafeProvider: React.FC<{ children: React.ReactNode }> = ({ children
         cafeId: activeCafe?.id || 'cafe-king-01',
         cafeName: activeCafe?.name || 'King Cafe',
         tableNumber: tableNum,
-        customerName: cleanName || `Guest (Table ${tableNum})`,
+        customerName: cleanName || `Customer (Table ${tableNum})`,
         customerPhone: '',
         items: [...cart],
         subtotal,
@@ -570,8 +578,10 @@ export const CafeProvider: React.FC<{ children: React.ReactNode }> = ({ children
         totalAmount,
         commissionAmount,
         saasCommission,
-        staffVerificationCode: code,
-        verificationStatus: code ? 'code_submitted' : 'pending_code',
+        generatedVerificationCode,
+        customerEnteredCode: '',
+        staffVerificationCode: '',
+        verificationStatus: 'pending_code',
         status: 'order_sent',
         statusTimestamps: {
           sent: now,
@@ -615,6 +625,7 @@ export const CafeProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (o.id === orderId) {
           return {
             ...o,
+            customerEnteredCode: cleanCode,
             staffVerificationCode: cleanCode,
             verificationStatus: 'code_submitted' as const,
             updatedAt: now,
@@ -624,6 +635,7 @@ export const CafeProvider: React.FC<{ children: React.ReactNode }> = ({ children
       });
       persistOrders(updated);
       updateOrderStatusInFirestore(orderId, {
+        customerEnteredCode: cleanCode,
         staffVerificationCode: cleanCode,
         verificationStatus: 'code_submitted',
       });

@@ -20,6 +20,7 @@ import {
   KeyRound,
   ShieldCheck,
   AlertCircle,
+  Send,
 } from 'lucide-react';
 import { useCafe } from '../../context/CafeContext';
 import { Category, MenuItem } from '../../types';
@@ -38,6 +39,7 @@ export const CustomerView: React.FC = () => {
     clearCart,
     cartTotal,
     cartItemCount,
+    customerActiveOrderId,
     activeCustomerOrder,
     submitOrder,
     setCustomerActiveOrderId,
@@ -48,30 +50,27 @@ export const CustomerView: React.FC = () => {
   const [vegOnly, setVegOnly] = useState<boolean>(false);
   const [isCartOpen, setIsCartOpen] = useState<boolean>(false);
   const [specialInstructions, setSpecialInstructions] = useState<string>('');
-  const [showStatusScreen, setShowStatusScreen] = useState<boolean>(false);
+  const [showStatusScreen, setShowStatusScreen] = useState<boolean>(() => {
+    return !!customerActiveOrderId;
+  });
 
   // Customer Real Name state
   const [realCustomerName, setRealCustomerName] = useState<string>(() => {
     const raw = customerSession.name || '';
-    return raw.startsWith('Guest (Table') ? '' : raw;
+    if (raw === 'Sneha' || raw === 'Sneha Kapoor' || raw.startsWith('Guest (Table') || raw.startsWith('Guest')) {
+      return '';
+    }
+    return raw;
   });
   const [nameError, setNameError] = useState<string>('');
 
-  // 4-Digit Staff Verification Code Modal state
-  const [isVerificationModalOpen, setIsVerificationModalOpen] = useState<boolean>(false);
-  const [codeDigits, setCodeDigits] = useState<string[]>(['', '', '', '']);
-  const [codeError, setCodeError] = useState<string>('');
-  const digitInputRefs = [
-    useRef<HTMLInputElement>(null),
-    useRef<HTMLInputElement>(null),
-    useRef<HTMLInputElement>(null),
-    useRef<HTMLInputElement>(null),
-  ];
-
-  // Table Setup Modal state if customer hasn't selected a table yet
+  // Table Setup Modal state if customer hasn't provided real name or table yet
   const [tempName, setTempName] = useState<string>(() => {
     const raw = customerSession.name || '';
-    return raw.startsWith('Guest (Table') ? '' : raw;
+    if (raw === 'Sneha' || raw === 'Sneha Kapoor' || raw.startsWith('Guest (Table') || raw.startsWith('Guest')) {
+      return '';
+    }
+    return raw;
   });
   const [tempTable, setTempTable] = useState<number | null>(() => {
     try {
@@ -85,12 +84,21 @@ export const CustomerView: React.FC = () => {
     return customerSession.tableNumber || 1;
   });
   const [isSettingUpTable, setIsSettingUpTable] = useState<boolean>(() => {
+    const raw = customerSession.name || '';
+    const hasValidName = raw && raw !== 'Sneha' && raw !== 'Sneha Kapoor' && !raw.startsWith('Guest');
     try {
       const params = new URLSearchParams(window.location.search);
-      if (params.get('table')) return false;
+      if (params.get('table') && hasValidName) return false;
     } catch {}
-    return !customerSession.tableNumber;
+    return !customerSession.tableNumber || !hasValidName;
   });
+
+  // Keep screen on live order status if an active order exists and is not yet cancelled
+  useEffect(() => {
+    if (activeCustomerOrder && activeCustomerOrder.status !== 'cancelled') {
+      setShowStatusScreen(true);
+    }
+  }, [activeCustomerOrder?.id, activeCustomerOrder?.status]);
 
   // Auto-sync table number from URL query like ?table=1 or ?table=2
   React.useEffect(() => {
@@ -102,30 +110,24 @@ export const CustomerView: React.FC = () => {
         const parsedTable = parseInt(tableParam, 10);
         if (!isNaN(parsedTable)) {
           setTempTable(parsedTable);
-          if (nameParam) {
-            setTempName(nameParam);
-            setRealCustomerName(nameParam);
+          const validName = nameParam && nameParam !== 'Sneha' && nameParam !== 'Sneha Kapoor' ? nameParam : '';
+          if (validName) {
+            setTempName(validName);
+            setRealCustomerName(validName);
           }
           setCustomerSession({
-            name: nameParam || (customerSession.name?.startsWith('Guest (Table') ? '' : customerSession.name) || '',
+            name: validName || (customerSession.name && !customerSession.name.startsWith('Guest') && customerSession.name !== 'Sneha' ? customerSession.name : ''),
             tableNumber: parsedTable,
           });
-          setIsSettingUpTable(false);
+          if (validName) {
+            setIsSettingUpTable(false);
+          }
         }
       }
     } catch {
       // ignore
     }
   }, [customerSession.name, setCustomerSession]);
-
-  // Focus first digit box when verification modal opens
-  useEffect(() => {
-    if (isVerificationModalOpen) {
-      setTimeout(() => {
-        digitInputRefs[0].current?.focus();
-      }, 100);
-    }
-  }, [isVerificationModalOpen]);
 
   const categories: ('All' | Category)[] = ['All', 'Pizza', 'Burger', 'Beverages'];
 
@@ -150,7 +152,7 @@ export const CustomerView: React.FC = () => {
     e.preventDefault();
     const chosenTable = tempTable || 1;
     const cleanName = tempName.trim();
-    if (!cleanName) {
+    if (!cleanName || cleanName === 'Sneha' || cleanName.toLowerCase() === 'sneha') {
       setNameError('Please enter your Real Name to begin ordering.');
       return;
     }
@@ -163,10 +165,10 @@ export const CustomerView: React.FC = () => {
     setIsSettingUpTable(false);
   };
 
-  const handleInitiateOrder = () => {
-    const cleanName = realCustomerName.trim() || (customerSession.name && !customerSession.name.startsWith('Guest (Table') ? customerSession.name.trim() : '');
-    if (!cleanName) {
-      setNameError('Real Name is required to place an order.');
+  const handleDirectPlaceOrder = () => {
+    const cleanName = realCustomerName.trim() || (customerSession.name && !customerSession.name.startsWith('Guest') && customerSession.name !== 'Sneha' ? customerSession.name.trim() : '');
+    if (!cleanName || cleanName === 'Sneha') {
+      setNameError('Your Real Name is required before placing the order.');
       return;
     }
     setNameError('');
@@ -175,72 +177,8 @@ export const CustomerView: React.FC = () => {
       tableNumber: customerSession.tableNumber || tempTable || 1,
     });
 
-    // Open Staff Verification Code Modal
-    setCodeDigits(['', '', '', '']);
-    setCodeError('');
-    setIsVerificationModalOpen(true);
-  };
-
-  const handleDigitChange = (index: number, val: string) => {
-    // Only accept numbers
-    const clean = val.replace(/\D/g, '');
-    if (!clean && val.length > 0) return;
-
-    const char = clean.slice(-1);
-    const newDigits = [...codeDigits];
-    newDigits[index] = char;
-    setCodeDigits(newDigits);
-    setCodeError('');
-
-    // Advance to next input if filled
-    if (char && index < 3) {
-      digitInputRefs[index + 1].current?.focus();
-    }
-  };
-
-  const handleDigitKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Backspace' && !codeDigits[index] && index > 0) {
-      digitInputRefs[index - 1].current?.focus();
-    } else if (e.key === 'Enter') {
-      e.preventDefault();
-      handleFinalOrderSubmit();
-    }
-  };
-
-  const handleDigitPaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
-    e.preventDefault();
-    const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 4);
-    if (!pasted) return;
-    const newDigits = ['', '', '', ''];
-    for (let i = 0; i < pasted.length; i++) {
-      newDigits[i] = pasted[i];
-    }
-    setCodeDigits(newDigits);
-    if (pasted.length === 4) {
-      digitInputRefs[3].current?.focus();
-    } else {
-      digitInputRefs[Math.min(3, pasted.length)].current?.focus();
-    }
-  };
-
-  const handleFinalOrderSubmit = () => {
-    const code = codeDigits.join('').trim();
-    if (code.length < 4) {
-      setCodeError('Please enter the complete 4-digit code provided by your staff.');
-      return;
-    }
-
-    const cleanName = realCustomerName.trim() || (customerSession.name && !customerSession.name.startsWith('Guest (Table') ? customerSession.name.trim() : '');
-    if (!cleanName) {
-      setCodeError('Customer name is missing. Please enter your name.');
-      return;
-    }
-
-    let tableNum = customerSession.tableNumber || tempTable || 1;
-
-    const order = submitOrder(specialInstructions, cleanName, code);
+    const order = submitOrder(specialInstructions, cleanName);
     if (order) {
-      setIsVerificationModalOpen(false);
       setIsCartOpen(false);
       setShowStatusScreen(true);
       setSpecialInstructions('');
@@ -252,8 +190,16 @@ export const CustomerView: React.FC = () => {
     return (
       <LiveOrderStatus
         order={activeCustomerOrder}
-        onBackToMenu={() => setShowStatusScreen(false)}
-        onOrderMore={() => setShowStatusScreen(false)}
+        onBackToMenu={() => {
+          if (activeCustomerOrder.status !== 'delivered_served') {
+            setShowStatusScreen(false);
+          }
+        }}
+        onOrderMore={() => {
+          if (activeCustomerOrder.status !== 'delivered_served') {
+            setShowStatusScreen(false);
+          }
+        }}
       />
     );
   }
@@ -729,124 +675,13 @@ export const CustomerView: React.FC = () => {
 
                 <button
                   id="btn-submit-order-now"
-                  onClick={handleInitiateOrder}
+                  onClick={handleDirectPlaceOrder}
                   className="w-full py-3.5 bg-[#795548] hover:bg-[#5D4037] text-white font-extrabold rounded-xl text-sm shadow-sm flex items-center justify-center gap-2 transition-colors cursor-pointer"
                 >
-                  <KeyRound className="w-4 h-4 text-amber-300" />
-                  <span>Enter Staff Code & Submit Order</span>
+                  <Send className="w-4 h-4 text-amber-300" />
+                  <span>Place Order • ₹{(cartTotal * 1.05).toFixed(2)}</span>
                   <ArrowRight className="w-4 h-4" />
                 </button>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-
-      {/* Staff Verification Code Modal (4-Digit PIN) */}
-      <AnimatePresence>
-        {isVerificationModalOpen && (
-          <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-4">
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setIsVerificationModalOpen(false)}
-              className="absolute inset-0 bg-[#3E2723]/75 backdrop-blur-xs"
-            />
-
-            <motion.div
-              initial={{ scale: 0.95, opacity: 0, y: 10 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.95, opacity: 0, y: 10 }}
-              className="relative bg-white rounded-3xl shadow-2xl border border-[#D7CCC8] p-6 sm:p-8 max-w-md w-full z-10 overflow-hidden"
-            >
-              {/* Header Badge */}
-              <div className="flex justify-between items-start mb-4">
-                <div className="w-12 h-12 rounded-2xl bg-[#795548]/10 text-[#795548] border border-[#795548]/20 flex items-center justify-center">
-                  <ShieldCheck className="w-6 h-6 text-[#795548]" />
-                </div>
-                <button
-                  id="btn-close-verification-modal"
-                  onClick={() => setIsVerificationModalOpen(false)}
-                  className="p-1.5 rounded-lg text-[#8D6E63] hover:text-[#3E2723] hover:bg-[#EFEBE9]"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-
-              <div className="mb-5">
-                <h3 className="text-xl font-extrabold text-[#3E2723] font-['Outfit']">
-                  Staff Verification Code
-                </h3>
-                <p className="text-xs text-[#795548] font-medium mt-1">
-                  Please ask your waiter/staff at{' '}
-                  <strong className="text-[#3E2723] font-bold">
-                    Table #{customerSession.tableNumber || tempTable || 1}
-                  </strong>{' '}
-                  for the 4-digit code to authorize this order.
-                </p>
-              </div>
-
-              {/* Order Info pill */}
-              <div className="bg-[#FAF8F6] border border-[#D7CCC8] rounded-xl p-3 mb-6 flex items-center justify-between text-xs">
-                <div>
-                  <span className="text-[#8D6E63] block text-[11px]">Customer</span>
-                  <span className="font-bold text-[#3E2723]">{realCustomerName || 'Guest'}</span>
-                </div>
-                <div className="text-right">
-                  <span className="text-[#8D6E63] block text-[11px]">Total ({cartItemCount} items)</span>
-                  <span className="font-black text-[#795548] font-mono">
-                    ₹{(cartTotal * 1.05).toFixed(2)}
-                  </span>
-                </div>
-              </div>
-
-              {/* 4-Digit Inputs */}
-              <div className="mb-5">
-                <label className="block text-xs font-bold text-center text-[#5D4037] mb-3 uppercase tracking-wider">
-                  Enter 4-Digit Security Code
-                </label>
-                <div className="flex items-center justify-center gap-3">
-                  {[0, 1, 2, 3].map((idx) => (
-                    <input
-                      key={idx}
-                      ref={digitInputRefs[idx]}
-                      id={`input-verification-digit-${idx}`}
-                      type="text"
-                      inputMode="numeric"
-                      maxLength={1}
-                      value={codeDigits[idx]}
-                      onChange={(e) => handleDigitChange(idx, e.target.value)}
-                      onKeyDown={(e) => handleDigitKeyDown(idx, e)}
-                      onPaste={handleDigitPaste}
-                      className="w-13 h-15 sm:w-14 sm:h-16 text-center text-2xl font-black font-mono bg-[#FAF8F6] border-2 border-[#D7CCC8] rounded-2xl text-[#3E2723] focus:border-[#795548] focus:bg-white focus:ring-4 focus:ring-[#795548]/20 focus:outline-none transition-all shadow-inner"
-                    />
-                  ))}
-                </div>
-
-                {codeError && (
-                  <p className="text-xs text-red-600 font-semibold text-center mt-3 flex items-center justify-center gap-1">
-                    <AlertCircle className="w-3.5 h-3.5" />
-                    {codeError}
-                  </p>
-                )}
-              </div>
-
-              {/* Action Buttons */}
-              <div className="space-y-2">
-                <button
-                  id="btn-confirm-verification-code"
-                  type="button"
-                  onClick={handleFinalOrderSubmit}
-                  className="w-full py-3.5 bg-[#795548] hover:bg-[#5D4037] text-white font-extrabold text-sm rounded-xl shadow-xs transition-colors flex items-center justify-center gap-2 cursor-pointer"
-                >
-                  <Check className="w-4 h-4" />
-                  <span>Verify & Send Order to Kitchen (Enter ↵)</span>
-                </button>
-
-                <p className="text-[11px] text-center text-[#8D6E63] pt-1">
-                  Tip: Waiters provide this 4-digit code directly at your table.
-                </p>
               </div>
             </motion.div>
           </div>

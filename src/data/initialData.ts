@@ -339,7 +339,7 @@ export const INITIAL_ORDERS: Order[] = [
     cafeId: 'cafe-king-01',
     cafeName: 'King Cafe',
     tableNumber: 2,
-    customerName: 'Sneha Kapoor',
+    customerName: 'Ananya Gupta',
     items: [
       { menuItem: INITIAL_MENU_ITEMS[2], quantity: 1 },
       { menuItem: INITIAL_MENU_ITEMS[8], quantity: 1 },
@@ -349,6 +349,10 @@ export const INITIAL_ORDERS: Order[] = [
     totalAmount: 743.4,
     commissionAmount: 74.34,
     saasCommission: 74.34,
+    generatedVerificationCode: '4821',
+    customerEnteredCode: '',
+    staffVerificationCode: '',
+    verificationStatus: 'pending_code',
     status: 'order_sent',
     statusTimestamps: {
       sent: '2026-08-31T10:38:00.000Z',

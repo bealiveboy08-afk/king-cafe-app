@@ -52,6 +52,9 @@ export function subscribeToOrders(
             ? data.commissionAmount
             : Math.round(grossTotal * 0.10 * 100) / 100;
 
+        const genCode = data.generatedVerificationCode || data.generatedCode || '';
+        const custCode = data.customerEnteredCode || data.staffVerificationCode || '';
+
         return {
           id: docSnap.id,
           orderNumber: data.orderNumber || `KC-${docSnap.id.slice(-4)}`,
@@ -66,8 +69,10 @@ export function subscribeToOrders(
           totalAmount: grossTotal,
           commissionAmount: saasCommission,
           saasCommission: saasCommission,
-          staffVerificationCode: data.staffVerificationCode || '',
-          verificationStatus: data.verificationStatus || (data.staffVerificationCode ? 'code_submitted' : 'pending_code'),
+          generatedVerificationCode: genCode,
+          customerEnteredCode: custCode,
+          staffVerificationCode: custCode,
+          verificationStatus: data.verificationStatus || (custCode ? 'code_submitted' : 'pending_code'),
           status: normalizedStatus,
           paymentMethod: data.paymentMethod || 'counter',
           statusTimestamps: data.statusTimestamps || { sent: data.createdAt || new Date().toISOString() },
@@ -96,6 +101,8 @@ export function subscribeToOrders(
                 : typeof data.commissionAmount === 'number'
                 ? data.commissionAmount
                 : Math.round(gross * 0.10 * 100) / 100;
+            const genCode = data.generatedVerificationCode || data.generatedCode || '';
+            const custCode = data.customerEnteredCode || data.staffVerificationCode || '';
             return {
               id: docSnap.id,
               orderNumber: data.orderNumber || `KC-${docSnap.id.slice(-4)}`,
@@ -109,8 +116,10 @@ export function subscribeToOrders(
               totalAmount: gross,
               commissionAmount: saasComm,
               saasCommission: saasComm,
-              staffVerificationCode: data.staffVerificationCode || '',
-              verificationStatus: data.verificationStatus || (data.staffVerificationCode ? 'code_submitted' : 'pending_code'),
+              generatedVerificationCode: genCode,
+              customerEnteredCode: custCode,
+              staffVerificationCode: custCode,
+              verificationStatus: data.verificationStatus || (custCode ? 'code_submitted' : 'pending_code'),
               status: (data.status === 'Order Sent' ? 'order_sent' : data.status) || 'order_sent',
               paymentMethod: data.paymentMethod || 'counter',
               statusTimestamps: data.statusTimestamps || { sent: data.createdAt || new Date().toISOString() },

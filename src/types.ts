@@ -53,6 +53,8 @@ export interface Order {
   totalAmount: number;
   commissionAmount: number; // 10% commission for SaaS Super Admin
   saasCommission?: number; // 10% SaaS platform fee saved in Firestore
+  generatedVerificationCode?: string; // 4-digit code generated for staff to hand to table
+  customerEnteredCode?: string; // 4-digit code entered by customer on screen
   staffVerificationCode?: string; // 4-digit code provided by staff/server
   verificationStatus?: 'pending_code' | 'code_submitted' | 'verified' | 'declined';
   status: OrderStatus;
