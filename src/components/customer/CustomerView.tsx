@@ -49,10 +49,44 @@ export const CustomerView: React.FC = () => {
 
   // Table Setup Modal state if customer hasn't selected a table yet
   const [tempName, setTempName] = useState<string>(customerSession.name || '');
-  const [tempTable, setTempTable] = useState<number | null>(customerSession.tableNumber || 4);
-  const [isSettingUpTable, setIsSettingUpTable] = useState<boolean>(
-    !customerSession.tableNumber
-  );
+  const [tempTable, setTempTable] = useState<number | null>(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const t = params.get('table');
+      if (t) return parseInt(t, 10) || 4;
+    } catch {}
+    return customerSession.tableNumber || 4;
+  });
+  const [isSettingUpTable, setIsSettingUpTable] = useState<boolean>(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('table')) return false;
+    } catch {}
+    return !customerSession.tableNumber;
+  });
+
+  // Auto-sync table number from URL query like ?table=2
+  React.useEffect(() => {
+    try {
+      const urlParams = new URLSearchParams(window.location.search);
+      const tableParam = urlParams.get('table');
+      const nameParam = urlParams.get('name');
+      if (tableParam) {
+        const parsedTable = parseInt(tableParam, 10);
+        if (!isNaN(parsedTable)) {
+          setTempTable(parsedTable);
+          if (nameParam) setTempName(nameParam);
+          setCustomerSession({
+            name: nameParam || customerSession.name || `Guest (T-${parsedTable})`,
+            tableNumber: parsedTable,
+          });
+          setIsSettingUpTable(false);
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }, [customerSession.name, setCustomerSession]);
 
   const categories: ('All' | Category)[] = ['All', 'Pizza', 'Burger', 'Beverages'];
 

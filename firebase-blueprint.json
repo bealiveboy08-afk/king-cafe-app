@@ -1,0 +1,67 @@
+{
+  "entities": {
+    "cafes": {
+      "title": "Cafes",
+      "description": "Registered cafe tenants",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "tagline": { "type": "string" },
+        "address": { "type": "string" },
+        "phone": { "type": "string" },
+        "tables": { "type": "array" },
+        "currency": { "type": "string" },
+        "commissionRate": { "type": "number" },
+        "logo": { "type": "string" },
+        "bannerImage": { "type": "string" },
+        "openingHours": { "type": "string" },
+        "taxRate": { "type": "number" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "name"]
+    },
+    "orders": {
+      "title": "Orders",
+      "description": "Live cafe orders placed across tables",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "orderNumber": { "type": "string" },
+        "cafeId": { "type": "string" },
+        "cafeName": { "type": "string" },
+        "tableNumber": { "type": "number" },
+        "customerName": { "type": "string" },
+        "items": { "type": "array" },
+        "subtotal": { "type": "number" },
+        "tax": { "type": "number" },
+        "totalAmount": { "type": "number" },
+        "commissionAmount": { "type": "number" },
+        "status": { "type": "string" },
+        "specialInstructions": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "estimatedMinutes": { "type": "number" }
+      },
+      "required": ["id", "orderNumber", "tableNumber", "status", "totalAmount"]
+    },
+    "menuItems": {
+      "title": "MenuItems",
+      "description": "Cafe menu catalog items",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "price": { "type": "number" },
+        "category": { "type": "string" },
+        "image": { "type": "string" },
+        "isAvailable": { "type": "boolean" },
+        "isChefSpecial": { "type": "boolean" },
+        "prepTimeMinutes": { "type": "number" },
+        "tags": { "type": "array" }
+      },
+      "required": ["id", "name", "price", "category", "isAvailable"]
+    }
+  },
+  "firestoreRules": "rules_version = '2';\nservice cloud.firestore {\n  match /databases/{database}/documents {\n    match /{document=**} {\n      allow read, write: if true;\n    }\n  }\n}"
+}
