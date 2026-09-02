@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Send,
@@ -12,8 +12,13 @@ import {
   ArrowLeft,
   ShoppingBag,
   Info,
+  KeyRound,
+  ShieldCheck,
+  AlertCircle,
+  Check,
 } from 'lucide-react';
 import { Order, OrderStatus } from '../../types';
+import { useCafe } from '../../context/CafeContext';
 
 interface LiveOrderStatusProps {
   order: Order;
@@ -26,6 +31,10 @@ export const LiveOrderStatus: React.FC<LiveOrderStatusProps> = ({
   onBackToMenu,
   onOrderMore,
 }) => {
+  const { submitOrderVerificationCode } = useCafe();
+  const [isEditingCode, setIsEditingCode] = useState<boolean>(false);
+  const [reenteredCode, setReenteredCode] = useState<string>('');
+
   const getStepNumber = (status: OrderStatus): number => {
     switch (status) {
       case 'order_sent':
@@ -172,9 +181,37 @@ export const LiveOrderStatus: React.FC<LiveOrderStatusProps> = ({
 
           <div className="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
-              <div className="inline-flex items-center gap-1.5 bg-black/20 backdrop-blur-xs px-3 py-1 rounded-full text-xs font-semibold tracking-wide text-white/90 mb-3">
-                <MapPin className="w-3 h-3 text-[#FFB74D]" />
-                Table #{order.tableNumber} • {order.customerName}
+              <div className="flex flex-wrap items-center gap-2 mb-3">
+                <div className="inline-flex items-center gap-1.5 bg-black/20 backdrop-blur-xs px-3 py-1 rounded-full text-xs font-semibold tracking-wide text-white/90">
+                  <MapPin className="w-3 h-3 text-[#FFB74D]" />
+                  Table #{order.tableNumber} • {order.customerName}
+                </div>
+
+                {order.staffVerificationCode ? (
+                  <div
+                    className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold ${
+                      order.verificationStatus === 'verified' || order.status !== 'order_sent'
+                        ? 'bg-emerald-600/90 text-white border border-emerald-400/40 shadow-xs'
+                        : order.verificationStatus === 'declined'
+                        ? 'bg-rose-600/95 text-white border border-rose-300'
+                        : 'bg-amber-500/90 text-amber-950 border border-amber-300'
+                    }`}
+                  >
+                    <KeyRound className="w-3.5 h-3.5" />
+                    <span>
+                      {order.verificationStatus === 'verified' || order.status !== 'order_sent'
+                        ? `Staff Code Verified: [ ${order.staffVerificationCode} ]`
+                        : order.verificationStatus === 'declined'
+                        ? `Staff Code Declined: [ ${order.staffVerificationCode} ]`
+                        : `Staff Code: [ ${order.staffVerificationCode} ] • Awaiting Staff`}
+                    </span>
+                  </div>
+                ) : (
+                  <div className="inline-flex items-center gap-1.5 bg-amber-500/80 text-amber-950 px-3 py-1 rounded-full text-xs font-bold">
+                    <AlertCircle className="w-3.5 h-3.5" />
+                    <span>No Staff Code Entered</span>
+                  </div>
+                )}
               </div>
 
               {/* Exact Hindi Status Highlight */}

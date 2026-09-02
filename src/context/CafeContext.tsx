@@ -60,11 +60,17 @@ interface CafeContextType {
   customerActiveOrderId: string | null;
   setCustomerActiveOrderId: (orderId: string | null) => void;
   activeCustomerOrder: Order | null;
-  submitOrder: (specialInstructions?: string) => Order | null;
+  submitOrder: (
+    specialInstructions?: string,
+    customerRealName?: string,
+    staffVerificationCode?: string
+  ) => Order | null;
+  submitOrderVerificationCode: (orderId: string, code: string) => void;
 
   // Orders Management (Owner & Admin)
   orders: Order[];
   approveOrder: (orderId: string) => void;
+  verifyOrderCode: (orderId: string, action: 'accept' | 'decline') => void;
   markDelivered: (orderId: string) => void;
   confirmPayment: (orderId: string, paymentMethod?: 'cash' | 'upi' | 'card' | 'counter') => void;
   cancelOrder: (orderId: string) => void;
@@ -515,7 +521,11 @@ export const CafeProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Submit Order from Customer Screen
   const submitOrder = useCallback(
-    (specialInstructions?: string): Order | null => {
+    (
+      specialInstructions?: string,
+      customerRealName?: string,
+      staffVerificationCode?: string
+    ): Order | null => {
       // Determine table number from session or fallback to URL parameter
       let tableNum = customerSession.tableNumber;
       if (!tableNum) {
@@ -541,6 +551,9 @@ export const CafeProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const saasCommission = Math.round(totalAmount * 0.10 * 100) / 100;
       const commissionAmount = saasCommission;
 
+      const cleanName = (customerRealName || customerSession.name || '').trim();
+      const code = (staffVerificationCode || '').trim();
+
       const now = new Date().toISOString();
       const orderNumber = `KC-${Math.floor(1000 + Math.random() * 9000)}`;
       const newOrder: Order = {
@@ -549,7 +562,7 @@ export const CafeProvider: React.FC<{ children: React.ReactNode }> = ({ children
         cafeId: activeCafe?.id || 'cafe-king-01',
         cafeName: activeCafe?.name || 'King Cafe',
         tableNumber: tableNum,
-        customerName: (customerSession.name || '').trim() || `Guest (Table ${tableNum})`,
+        customerName: cleanName || `Guest (Table ${tableNum})`,
         customerPhone: '',
         items: [...cart],
         subtotal,
@@ -557,6 +570,8 @@ export const CafeProvider: React.FC<{ children: React.ReactNode }> = ({ children
         totalAmount,
         commissionAmount,
         saasCommission,
+        staffVerificationCode: code,
+        verificationStatus: code ? 'code_submitted' : 'pending_code',
         status: 'order_sent',
         statusTimestamps: {
           sent: now,
@@ -589,6 +604,31 @@ export const CafeProvider: React.FC<{ children: React.ReactNode }> = ({ children
       clearCart,
       soundEnabled,
     ]
+  );
+
+  // Submit/Update 4-digit staff verification code from customer side
+  const submitOrderVerificationCode = useCallback(
+    (orderId: string, code: string) => {
+      const cleanCode = code.trim();
+      const now = new Date().toISOString();
+      const updated = orders.map((o) => {
+        if (o.id === orderId) {
+          return {
+            ...o,
+            staffVerificationCode: cleanCode,
+            verificationStatus: 'code_submitted' as const,
+            updatedAt: now,
+          };
+        }
+        return o;
+      });
+      persistOrders(updated);
+      updateOrderStatusInFirestore(orderId, {
+        staffVerificationCode: cleanCode,
+        verificationStatus: 'code_submitted',
+      });
+    },
+    [orders, persistOrders]
   );
 
   // Active Customer Order Tracker
@@ -625,6 +665,7 @@ export const CafeProvider: React.FC<{ children: React.ReactNode }> = ({ children
           return {
             ...o,
             status: 'approved_preparing' as OrderStatus,
+            verificationStatus: 'verified' as const,
             statusTimestamps: updatedTimestamps,
             updatedAt: now,
           };
@@ -634,10 +675,63 @@ export const CafeProvider: React.FC<{ children: React.ReactNode }> = ({ children
       persistOrders(updated);
       updateOrderStatusInFirestore(orderId, {
         status: 'approved_preparing',
+        verificationStatus: 'verified',
         statusTimestamps: updatedTimestamps,
       });
       if (soundEnabled) {
         playNotificationSound('approved');
+      }
+    },
+    [orders, persistOrders, soundEnabled]
+  );
+
+  const verifyOrderCode = useCallback(
+    (orderId: string, action: 'accept' | 'decline') => {
+      const now = new Date().toISOString();
+      const existing = orders.find((o) => o.id === orderId);
+
+      if (action === 'accept') {
+        const updatedTimestamps = {
+          sent: existing?.statusTimestamps.sent || now,
+          ...existing?.statusTimestamps,
+          approved: now,
+        };
+        const updated = orders.map((o) => {
+          if (o.id === orderId) {
+            return {
+              ...o,
+              verificationStatus: 'verified' as const,
+              status: 'approved_preparing' as OrderStatus,
+              statusTimestamps: updatedTimestamps,
+              updatedAt: now,
+            };
+          }
+          return o;
+        });
+        persistOrders(updated);
+        updateOrderStatusInFirestore(orderId, {
+          verificationStatus: 'verified',
+          status: 'approved_preparing',
+          statusTimestamps: updatedTimestamps,
+        });
+        if (soundEnabled) {
+          playNotificationSound('approved');
+        }
+      } else {
+        const updated = orders.map((o) => {
+          if (o.id === orderId) {
+            return {
+              ...o,
+              verificationStatus: 'declined' as const,
+              updatedAt: now,
+            };
+          }
+          return o;
+        });
+        persistOrders(updated);
+        updateOrderStatusInFirestore(orderId, {
+          verificationStatus: 'declined',
+        });
       }
     },
     [orders, persistOrders, soundEnabled]
@@ -877,8 +971,10 @@ export const CafeProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setCustomerActiveOrderId,
         activeCustomerOrder,
         submitOrder,
+        submitOrderVerificationCode,
         orders,
         approveOrder,
+        verifyOrderCode,
         markDelivered,
         confirmPayment,
         cancelOrder,

@@ -21,6 +21,9 @@ import {
   Calendar,
   Layers,
   ArrowLeft,
+  KeyRound,
+  ShieldCheck,
+  ShieldAlert,
 } from 'lucide-react';
 import { useCafe } from '../../context/CafeContext';
 import { Order, OrderStatus } from '../../types';
@@ -30,6 +33,7 @@ export const OwnerPanel: React.FC = () => {
     activeCafe,
     orders,
     approveOrder,
+    verifyOrderCode,
     markDelivered,
     confirmPayment,
     cancelOrder,
@@ -520,6 +524,41 @@ export const OwnerPanel: React.FC = () => {
                         )}
                       </div>
 
+                      {/* Staff Verification Code Strip */}
+                      <div className="px-4 py-2.5 bg-[#F7F3F0] border-t border-[#D7CCC8] flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <KeyRound className="w-3.5 h-3.5 text-[#795548]" />
+                          <span className="text-[11px] font-bold text-[#5D4037]">Staff Code:</span>
+                          {order.staffVerificationCode ? (
+                            <span className="px-2 py-0.5 bg-white border border-[#D7CCC8] text-[#3E2723] font-mono font-black text-xs tracking-widest rounded-md shadow-2xs">
+                              {order.staffVerificationCode}
+                            </span>
+                          ) : (
+                            <span className="text-[10px] text-[#8D6E63] italic">None provided</span>
+                          )}
+                        </div>
+
+                        {/* Code Status Badge */}
+                        <div>
+                          {order.verificationStatus === 'verified' || !isPending ? (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-[#1B5E20] bg-[#E8F5E9] border border-[#C8E6C9] px-2 py-0.5 rounded-full">
+                              <ShieldCheck className="w-3 h-3" />
+                              VERIFIED
+                            </span>
+                          ) : order.verificationStatus === 'declined' ? (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-red-700 bg-red-50 border border-red-200 px-2 py-0.5 rounded-full">
+                              <ShieldAlert className="w-3 h-3" />
+                              DECLINED
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-800 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
+                              <Clock className="w-3 h-3" />
+                              AWAITING VERIFICATION
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
                       {/* Financial Total */}
                       <div className="px-4 py-2 bg-[#FAF8F6] border-t border-[#D7CCC8] flex items-center justify-between text-xs">
                         <span className="text-[#8D6E63]">Total Bill (inc. Tax)</span>
@@ -530,16 +569,38 @@ export const OwnerPanel: React.FC = () => {
 
                       {/* Action Buttons Section */}
                       <div className="p-3 bg-[#FAF8F6] border-t border-[#D7CCC8] space-y-2">
-                        {/* Step 1 Action: Approve Order */}
+                        {/* Step 1 Action: Accept or Decline Staff Code / Approve Order */}
                         {isPending && (
-                          <button
-                            id={`btn-approve-order-${order.id}`}
-                            onClick={() => approveOrder(order.id)}
-                            className="w-full py-2.5 bg-[#8D6E63] hover:bg-[#795548] text-white font-black text-xs rounded-xl shadow-xs transition-all flex items-center justify-center gap-2"
-                          >
-                            <ChefHat className="w-4 h-4" />
-                            <span>Approve Order (Send to Kitchen)</span>
-                          </button>
+                          <div className="space-y-1.5">
+                            <div className="grid grid-cols-2 gap-2">
+                              <button
+                                id={`btn-accept-code-${order.id}`}
+                                onClick={() => verifyOrderCode(order.id, 'accept')}
+                                className="py-2.5 bg-[#2E7D32] hover:bg-[#1B5E20] text-white font-extrabold text-xs rounded-xl shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                              >
+                                <Check className="w-3.5 h-3.5" />
+                                <span>Accept Code & Cook</span>
+                              </button>
+
+                              <button
+                                id={`btn-decline-code-${order.id}`}
+                                onClick={() => verifyOrderCode(order.id, 'decline')}
+                                className="py-2.5 bg-white hover:bg-red-50 text-red-700 border border-red-300 font-bold text-xs rounded-xl shadow-2xs transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                                <span>Decline Code</span>
+                              </button>
+                            </div>
+
+                            <button
+                              id={`btn-approve-order-${order.id}`}
+                              onClick={() => approveOrder(order.id)}
+                              className="w-full py-2 bg-[#8D6E63] hover:bg-[#795548] text-white font-bold text-[11px] rounded-xl shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                            >
+                              <ChefHat className="w-3.5 h-3.5" />
+                              <span>Direct Approve (Send to Kitchen)</span>
+                            </button>
+                          </div>
                         )}
 
                         {/* Step 2 Action: Mark Delivered */}
