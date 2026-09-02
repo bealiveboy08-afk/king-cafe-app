@@ -30,25 +30,40 @@ export function subscribeToOrders(
     (snapshot) => {
       const liveOrders: Order[] = snapshot.docs.map((docSnap) => {
         const data = docSnap.data();
+        const rawStatus = String(data.status || 'order_sent').toLowerCase().trim();
+        let normalizedStatus: Order['status'] = 'order_sent';
+        if (rawStatus.includes('sent') || rawStatus.includes('pending') || rawStatus === 'order sent') {
+          normalizedStatus = 'order_sent';
+        } else if (rawStatus.includes('prepar') || rawStatus.includes('cook') || rawStatus.includes('approv')) {
+          normalizedStatus = 'approved_preparing';
+        } else if (rawStatus.includes('deliver') || rawStatus.includes('serv')) {
+          normalizedStatus = 'delivered_served';
+        } else if (rawStatus.includes('paid') || rawStatus.includes('settl') || rawStatus.includes('confirm')) {
+          normalizedStatus = 'payment_confirmed';
+        } else if (rawStatus.includes('cancel')) {
+          normalizedStatus = 'cancelled';
+        }
+
         return {
           id: docSnap.id,
-          orderNumber: data.orderNumber || docSnap.id,
+          orderNumber: data.orderNumber || `KC-${docSnap.id.slice(-4)}`,
           cafeId: data.cafeId || 'cafe-king-01',
-          cafeName: data.cafeName || 'King Cafe & Bistro',
+          cafeName: data.cafeName || 'King Cafe',
           tableNumber: Number(data.tableNumber) || 1,
-          customerName: data.customerName || 'Guest',
+          customerName: data.customerName || `Guest (Table ${Number(data.tableNumber) || 1})`,
+          customerPhone: data.customerPhone || '',
           items: data.items || [],
           subtotal: Number(data.subtotal) || 0,
           tax: Number(data.tax) || 0,
           totalAmount: Number(data.totalAmount) || 0,
           commissionAmount: Number(data.commissionAmount) || 0,
-          status: data.status || 'order_sent',
-          paymentMethod: data.paymentMethod,
-          statusTimestamps: data.statusTimestamps || { sent: data.createdAt },
-          specialInstructions: data.specialInstructions,
+          status: normalizedStatus,
+          paymentMethod: data.paymentMethod || 'counter',
+          statusTimestamps: data.statusTimestamps || { sent: data.createdAt || new Date().toISOString() },
+          specialInstructions: data.specialInstructions || '',
           createdAt: data.createdAt || new Date().toISOString(),
           updatedAt: data.updatedAt || new Date().toISOString(),
-          estimatedMinutes: data.estimatedMinutes,
+          estimatedMinutes: Number(data.estimatedMinutes) || 15,
         } as Order;
       });
 
@@ -57,7 +72,37 @@ export function subscribeToOrders(
     },
     (err) => {
       console.warn('Firestore orders subscription error:', err);
+      // Fallback subscription without orderBy in case index or field is missing
+      const fallbackUnsub = onSnapshot(
+        collection(db, ORDERS_COLLECTION),
+        (snap) => {
+          const fallbackOrders: Order[] = snap.docs.map((docSnap) => {
+            const data = docSnap.data();
+            return {
+              id: docSnap.id,
+              orderNumber: data.orderNumber || `KC-${docSnap.id.slice(-4)}`,
+              cafeId: data.cafeId || 'cafe-king-01',
+              cafeName: data.cafeName || 'King Cafe',
+              tableNumber: Number(data.tableNumber) || 1,
+              customerName: data.customerName || `Guest (Table ${Number(data.tableNumber) || 1})`,
+              items: data.items || [],
+              subtotal: Number(data.subtotal) || 0,
+              tax: Number(data.tax) || 0,
+              totalAmount: Number(data.totalAmount) || 0,
+              commissionAmount: Number(data.commissionAmount) || 0,
+              status: (data.status === 'Order Sent' ? 'order_sent' : data.status) || 'order_sent',
+              paymentMethod: data.paymentMethod || 'counter',
+              statusTimestamps: data.statusTimestamps || { sent: data.createdAt || new Date().toISOString() },
+              specialInstructions: data.specialInstructions || '',
+              createdAt: data.createdAt || new Date().toISOString(),
+              updatedAt: data.updatedAt || new Date().toISOString(),
+            } as Order;
+          }).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+          onOrdersUpdate(fallbackOrders, isInitial);
+        }
+      );
       if (onError) onError(err);
+      return fallbackUnsub;
     }
   );
 
@@ -147,11 +192,20 @@ export async function seedInitialFirestoreData() {
   }
 }
 
+// Helper to sanitize payload for Firestore (removes undefined fields which crash Firestore setDoc)
+function sanitizeForFirestore<T>(data: T): T {
+  return JSON.parse(JSON.stringify(data));
+}
+
 // Create or update order in Firestore
 export async function saveOrderToFirestore(order: Order): Promise<void> {
   try {
     const orderRef = doc(db, ORDERS_COLLECTION, order.id);
-    await setDoc(orderRef, order, { merge: true });
+    const cleanPayload = sanitizeForFirestore({
+      ...order,
+      status: order.status || 'order_sent',
+    });
+    await setDoc(orderRef, cleanPayload, { merge: true });
   } catch (err) {
     console.error('Failed to save order to Firestore:', err);
   }
@@ -164,10 +218,11 @@ export async function updateOrderStatusInFirestore(
 ): Promise<void> {
   try {
     const orderRef = doc(db, ORDERS_COLLECTION, orderId);
-    await updateDoc(orderRef, {
+    const cleanUpdates = sanitizeForFirestore({
       ...updates,
       updatedAt: new Date().toISOString(),
     });
+    await updateDoc(orderRef, cleanUpdates);
   } catch (err) {
     console.error('Failed to update order in Firestore:', err);
   }

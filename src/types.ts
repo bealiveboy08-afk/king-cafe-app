@@ -61,6 +61,7 @@ export interface Order {
   };
   paymentMethod?: 'cash' | 'upi' | 'card' | 'counter';
   specialInstructions?: string;
+  estimatedMinutes?: number;
   createdAt: string;
   updatedAt: string;
 }

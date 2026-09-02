@@ -53,9 +53,12 @@ export const CustomerView: React.FC = () => {
     try {
       const params = new URLSearchParams(window.location.search);
       const t = params.get('table');
-      if (t) return parseInt(t, 10) || 4;
+      if (t) {
+        const parsed = parseInt(t, 10);
+        if (!isNaN(parsed)) return parsed;
+      }
     } catch {}
-    return customerSession.tableNumber || 4;
+    return customerSession.tableNumber || 1;
   });
   const [isSettingUpTable, setIsSettingUpTable] = useState<boolean>(() => {
     try {
@@ -65,7 +68,7 @@ export const CustomerView: React.FC = () => {
     return !customerSession.tableNumber;
   });
 
-  // Auto-sync table number from URL query like ?table=2
+  // Auto-sync table number from URL query like ?table=1 or ?table=2
   React.useEffect(() => {
     try {
       const urlParams = new URLSearchParams(window.location.search);
@@ -77,7 +80,7 @@ export const CustomerView: React.FC = () => {
           setTempTable(parsedTable);
           if (nameParam) setTempName(nameParam);
           setCustomerSession({
-            name: nameParam || customerSession.name || `Guest (T-${parsedTable})`,
+            name: nameParam || customerSession.name || `Guest (Table ${parsedTable})`,
             tableNumber: parsedTable,
           });
           setIsSettingUpTable(false);
@@ -109,19 +112,34 @@ export const CustomerView: React.FC = () => {
 
   const handleSaveCustomerInfo = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!tempTable) return;
+    const chosenTable = tempTable || 1;
     setCustomerSession({
-      name: tempName.trim() || `Guest (T-${tempTable})`,
-      tableNumber: tempTable,
+      name: tempName.trim() || `Guest (Table ${chosenTable})`,
+      tableNumber: chosenTable,
     });
     setIsSettingUpTable(false);
   };
 
   const handleCheckout = () => {
-    if (!customerSession.tableNumber) {
-      setIsSettingUpTable(true);
-      return;
+    let tableNum = customerSession.tableNumber;
+    if (!tableNum) {
+      try {
+        const params = new URLSearchParams(window.location.search);
+        const t = params.get('table');
+        if (t) {
+          const parsed = parseInt(t, 10);
+          if (!isNaN(parsed)) tableNum = parsed;
+        }
+      } catch {}
     }
+    if (!tableNum) {
+      tableNum = 1;
+      setCustomerSession({
+        name: customerSession.name || 'Guest (Table 1)',
+        tableNumber: 1,
+      });
+    }
+
     const order = submitOrder(specialInstructions);
     if (order) {
       setIsCartOpen(false);

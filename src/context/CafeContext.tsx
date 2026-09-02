@@ -159,16 +159,25 @@ export const CafeProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
 
   const [customerSession, setCustomerSessionState] = useState<CustomerSession>(() => {
-    const urlParams = new URLSearchParams(window.location.search);
-    const tableParam = urlParams.get('table');
-    const nameParam = urlParams.get('name');
+    let tableNum: number | null = null;
+    let name = '';
+    try {
+      const urlParams = new URLSearchParams(window.location.search);
+      const tableParam = urlParams.get('table');
+      const nameParam = urlParams.get('name');
+      if (tableParam) {
+        const parsed = parseInt(tableParam, 10);
+        if (!isNaN(parsed)) tableNum = parsed;
+      }
+      if (nameParam) name = nameParam;
+    } catch {}
 
     const saved = localStorage.getItem(STORAGE_KEYS.CUSTOMER);
     const parsed = saved ? JSON.parse(saved) : { name: '', tableNumber: null };
 
     return {
-      name: nameParam || parsed.name || '',
-      tableNumber: tableParam ? parseInt(tableParam, 10) : parsed.tableNumber || null,
+      name: name || parsed.name || '',
+      tableNumber: tableNum !== null ? tableNum : (parsed.tableNumber || 1),
     };
   });
 
@@ -514,27 +523,33 @@ export const CafeProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const urlParams = new URLSearchParams(window.location.search);
           const tParam = urlParams.get('table');
           if (tParam) {
-            tableNum = parseInt(tParam, 10);
+            const parsed = parseInt(tParam, 10);
+            if (!isNaN(parsed)) tableNum = parsed;
           }
         } catch {}
       }
+      if (!tableNum) {
+        tableNum = 1;
+      }
 
-      if (cart.length === 0 || !tableNum) return null;
+      if (cart.length === 0) return null;
 
       const subtotal = cartTotal;
       const tax = Math.round(subtotal * 0.05 * 100) / 100; // 5% GST
       const totalAmount = Math.round((subtotal + tax) * 100) / 100;
-      const commissionRate = activeCafe.commissionRate || 0.10;
+      const commissionRate = activeCafe?.commissionRate || 0.10;
       const commissionAmount = Math.round(totalAmount * commissionRate * 100) / 100;
 
+      const now = new Date().toISOString();
       const orderNumber = `KC-${Math.floor(1000 + Math.random() * 9000)}`;
       const newOrder: Order = {
         id: `ord-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
         orderNumber,
-        cafeId: activeCafe.id,
-        cafeName: activeCafe.name,
+        cafeId: activeCafe?.id || 'cafe-king-01',
+        cafeName: activeCafe?.name || 'King Cafe',
         tableNumber: tableNum,
-        customerName: customerSession.name.trim() || `Guest (Table ${tableNum})`,
+        customerName: (customerSession.name || '').trim() || `Guest (Table ${tableNum})`,
+        customerPhone: '',
         items: [...cart],
         subtotal,
         tax,
@@ -542,11 +557,12 @@ export const CafeProvider: React.FC<{ children: React.ReactNode }> = ({ children
         commissionAmount,
         status: 'order_sent',
         statusTimestamps: {
-          sent: new Date().toISOString(),
+          sent: now,
         },
-        specialInstructions,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
+        specialInstructions: specialInstructions ? specialInstructions.trim() : '',
+        createdAt: now,
+        updatedAt: now,
+        estimatedMinutes: 15,
       };
 
       const updatedOrders = [newOrder, ...orders];

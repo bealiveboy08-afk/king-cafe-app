@@ -63,23 +63,37 @@ export const OwnerPanel: React.FC = () => {
     }
   };
 
-  // Filter orders for King Cafe
+  // Status normalizer helper to handle variations like 'Order Sent', 'order_sent', etc.
+  const normalizeStatus = (rawStatus: string): OrderStatus => {
+    const s = String(rawStatus || '').toLowerCase().trim();
+    if (s.includes('sent') || s.includes('pending') || s === 'order sent') return 'order_sent';
+    if (s.includes('prepar') || s.includes('cook') || s.includes('approv')) return 'approved_preparing';
+    if (s.includes('deliver') || s.includes('serv')) return 'delivered_served';
+    if (s.includes('paid') || s.includes('settl') || s.includes('confirm')) return 'payment_confirmed';
+    if (s.includes('cancel')) return 'cancelled';
+    return 'order_sent';
+  };
+
+  // Filter orders for King Cafe (ensuring no valid dine-in order is missed)
   const cafeOrders = useMemo(() => {
-    return orders.filter((o) => o.cafeId === activeCafe.id);
+    return orders.filter(
+      (o) => !o.cafeId || o.cafeId === activeCafe.id || o.cafeId === 'cafe-king-01' || o.cafeId === 'king-cafe'
+    );
   }, [orders, activeCafe.id]);
 
   const filteredOrders = useMemo(() => {
     return cafeOrders.filter((order) => {
-      if (selectedStatusTab === 'pending' && order.status !== 'order_sent') return false;
-      if (selectedStatusTab === 'preparing' && order.status !== 'approved_preparing') return false;
-      if (selectedStatusTab === 'delivered' && order.status !== 'delivered_served') return false;
-      if (selectedStatusTab === 'paid' && order.status !== 'payment_confirmed') return false;
+      const status = normalizeStatus(order.status);
+      if (selectedStatusTab === 'pending' && status !== 'order_sent') return false;
+      if (selectedStatusTab === 'preparing' && status !== 'approved_preparing') return false;
+      if (selectedStatusTab === 'delivered' && status !== 'delivered_served') return false;
+      if (selectedStatusTab === 'paid' && status !== 'payment_confirmed') return false;
       if (tableFilter !== 'all' && order.tableNumber.toString() !== tableFilter) return false;
 
       if (searchQuery.trim()) {
         const query = searchQuery.toLowerCase();
-        const matchesNumber = order.orderNumber.toLowerCase().includes(query);
-        const matchesCustomer = order.customerName.toLowerCase().includes(query);
+        const matchesNumber = (order.orderNumber || '').toLowerCase().includes(query);
+        const matchesCustomer = (order.customerName || '').toLowerCase().includes(query);
         return matchesNumber || matchesCustomer;
       }
       return true;
@@ -87,11 +101,11 @@ export const OwnerPanel: React.FC = () => {
   }, [cafeOrders, selectedStatusTab, tableFilter, searchQuery]);
 
   // Statistics
-  const pendingCount = cafeOrders.filter((o) => o.status === 'order_sent').length;
-  const preparingCount = cafeOrders.filter((o) => o.status === 'approved_preparing').length;
-  const servedCount = cafeOrders.filter((o) => o.status === 'delivered_served').length;
-  const paidOrders = cafeOrders.filter((o) => o.status === 'payment_confirmed');
-  const totalRevenueToday = paidOrders.reduce((sum, o) => sum + o.totalAmount, 0);
+  const pendingCount = cafeOrders.filter((o) => normalizeStatus(o.status) === 'order_sent').length;
+  const preparingCount = cafeOrders.filter((o) => normalizeStatus(o.status) === 'approved_preparing').length;
+  const servedCount = cafeOrders.filter((o) => normalizeStatus(o.status) === 'delivered_served').length;
+  const paidOrders = cafeOrders.filter((o) => normalizeStatus(o.status) === 'payment_confirmed');
+  const totalRevenueToday = paidOrders.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
 
   // Time elapsed calculator helper
   const getTimeElapsed = (dateStr: string) => {
@@ -418,10 +432,11 @@ export const OwnerPanel: React.FC = () => {
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
                 {filteredOrders.map((order) => {
-                  const isPending = order.status === 'order_sent';
-                  const isPreparing = order.status === 'approved_preparing';
-                  const isDelivered = order.status === 'delivered_served';
-                  const isPaid = order.status === 'payment_confirmed';
+                  const status = normalizeStatus(order.status);
+                  const isPending = status === 'order_sent';
+                  const isPreparing = status === 'approved_preparing';
+                  const isDelivered = status === 'delivered_served';
+                  const isPaid = status === 'payment_confirmed';
 
                   return (
                     <motion.div
