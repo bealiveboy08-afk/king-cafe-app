@@ -268,6 +268,7 @@ export const INITIAL_ORDERS: Order[] = [
     tax: 39.35,
     totalAmount: 826.35,
     commissionAmount: 82.64, // 10% commission
+    saasCommission: 82.64,
     status: 'payment_confirmed',
     statusTimestamps: {
       sent: '2026-08-31T09:15:00.000Z',
@@ -295,6 +296,7 @@ export const INITIAL_ORDERS: Order[] = [
     tax: 47.8,
     totalAmount: 1003.8,
     commissionAmount: 100.38,
+    saasCommission: 100.38,
     status: 'delivered_served',
     statusTimestamps: {
       sent: '2026-08-31T10:02:00.000Z',
@@ -321,6 +323,7 @@ export const INITIAL_ORDERS: Order[] = [
     tax: 50.85,
     totalAmount: 1067.85,
     commissionAmount: 106.79,
+    saasCommission: 106.79,
     status: 'approved_preparing',
     statusTimestamps: {
       sent: '2026-08-31T10:28:00.000Z',
@@ -345,6 +348,7 @@ export const INITIAL_ORDERS: Order[] = [
     tax: 35.4,
     totalAmount: 743.4,
     commissionAmount: 74.34,
+    saasCommission: 74.34,
     status: 'order_sent',
     statusTimestamps: {
       sent: '2026-08-31T10:38:00.000Z',

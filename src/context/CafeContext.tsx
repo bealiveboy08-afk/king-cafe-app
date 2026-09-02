@@ -537,8 +537,9 @@ export const CafeProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const subtotal = cartTotal;
       const tax = Math.round(subtotal * 0.05 * 100) / 100; // 5% GST
       const totalAmount = Math.round((subtotal + tax) * 100) / 100;
-      const commissionRate = activeCafe?.commissionRate || 0.10;
-      const commissionAmount = Math.round(totalAmount * commissionRate * 100) / 100;
+      // Exactly 10% of the gross order total (orderTotal * 0.10)
+      const saasCommission = Math.round(totalAmount * 0.10 * 100) / 100;
+      const commissionAmount = saasCommission;
 
       const now = new Date().toISOString();
       const orderNumber = `KC-${Math.floor(1000 + Math.random() * 9000)}`;
@@ -555,6 +556,7 @@ export const CafeProvider: React.FC<{ children: React.ReactNode }> = ({ children
         tax,
         totalAmount,
         commissionAmount,
+        saasCommission,
         status: 'order_sent',
         statusTimestamps: {
           sent: now,
@@ -816,9 +818,18 @@ export const CafeProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Super Admin Platform Ledger & Commission Calculation
   const ledgerSummary = useMemo<PlatformLedgerSummary>(() => {
     const validOrders = orders.filter((o) => o.status !== 'cancelled');
-    const totalRevenue = validOrders.reduce((sum, o) => sum + o.totalAmount, 0);
-    // 1% Commission across all orders
-    const totalCommission = validOrders.reduce((sum, o) => sum + o.commissionAmount, 0);
+    const totalRevenue = validOrders.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
+    // 10% SaaS Platform fee across all orders
+    const totalCommission = validOrders.reduce(
+      (sum, o) =>
+        sum +
+        (typeof o.saasCommission === 'number'
+          ? o.saasCommission
+          : typeof o.commissionAmount === 'number'
+          ? o.commissionAmount
+          : Math.round((o.totalAmount || 0) * 0.10 * 100) / 100),
+      0
+    );
 
     return {
       totalRevenue: Math.round(totalRevenue * 100) / 100,

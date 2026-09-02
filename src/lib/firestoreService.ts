@@ -44,6 +44,14 @@ export function subscribeToOrders(
           normalizedStatus = 'cancelled';
         }
 
+        const grossTotal = Number(data.totalAmount) || 0;
+        const saasCommission =
+          typeof data.saasCommission === 'number'
+            ? data.saasCommission
+            : typeof data.commissionAmount === 'number'
+            ? data.commissionAmount
+            : Math.round(grossTotal * 0.10 * 100) / 100;
+
         return {
           id: docSnap.id,
           orderNumber: data.orderNumber || `KC-${docSnap.id.slice(-4)}`,
@@ -55,8 +63,9 @@ export function subscribeToOrders(
           items: data.items || [],
           subtotal: Number(data.subtotal) || 0,
           tax: Number(data.tax) || 0,
-          totalAmount: Number(data.totalAmount) || 0,
-          commissionAmount: Number(data.commissionAmount) || 0,
+          totalAmount: grossTotal,
+          commissionAmount: saasCommission,
+          saasCommission: saasCommission,
           status: normalizedStatus,
           paymentMethod: data.paymentMethod || 'counter',
           statusTimestamps: data.statusTimestamps || { sent: data.createdAt || new Date().toISOString() },
@@ -78,6 +87,13 @@ export function subscribeToOrders(
         (snap) => {
           const fallbackOrders: Order[] = snap.docs.map((docSnap) => {
             const data = docSnap.data();
+            const gross = Number(data.totalAmount) || 0;
+            const saasComm =
+              typeof data.saasCommission === 'number'
+                ? data.saasCommission
+                : typeof data.commissionAmount === 'number'
+                ? data.commissionAmount
+                : Math.round(gross * 0.10 * 100) / 100;
             return {
               id: docSnap.id,
               orderNumber: data.orderNumber || `KC-${docSnap.id.slice(-4)}`,
@@ -88,8 +104,9 @@ export function subscribeToOrders(
               items: data.items || [],
               subtotal: Number(data.subtotal) || 0,
               tax: Number(data.tax) || 0,
-              totalAmount: Number(data.totalAmount) || 0,
-              commissionAmount: Number(data.commissionAmount) || 0,
+              totalAmount: gross,
+              commissionAmount: saasComm,
+              saasCommission: saasComm,
               status: (data.status === 'Order Sent' ? 'order_sent' : data.status) || 'order_sent',
               paymentMethod: data.paymentMethod || 'counter',
               statusTimestamps: data.statusTimestamps || { sent: data.createdAt || new Date().toISOString() },
@@ -201,8 +218,19 @@ function sanitizeForFirestore<T>(data: T): T {
 export async function saveOrderToFirestore(order: Order): Promise<void> {
   try {
     const orderRef = doc(db, ORDERS_COLLECTION, order.id);
+    const grossTotal = Number(order.totalAmount) || 0;
+    const saasCommission =
+      typeof order.saasCommission === 'number'
+        ? order.saasCommission
+        : typeof order.commissionAmount === 'number'
+        ? order.commissionAmount
+        : Math.round(grossTotal * 0.10 * 100) / 100;
+
     const cleanPayload = sanitizeForFirestore({
       ...order,
+      totalAmount: grossTotal,
+      saasCommission,
+      commissionAmount: saasCommission,
       status: order.status || 'order_sent',
     });
     await setDoc(orderRef, cleanPayload, { merge: true });

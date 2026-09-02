@@ -119,9 +119,10 @@ export const SuperAdminDashboard: React.FC = () => {
 
   const handleExportCSV = () => {
     const headers = ['Order Number,Cafe,Table,Customer,Subtotal,Tax,Total Amount,10% Commission,Status,Timestamp\n'];
-    const rows = filteredLedgerOrders.map((o) =>
-      `"${o.orderNumber}","${o.cafeName}",${o.tableNumber},"${o.customerName}",${o.subtotal},${o.tax},${o.totalAmount},${o.commissionAmount},"${o.status}","${o.createdAt}"`
-    );
+    const rows = filteredLedgerOrders.map((o) => {
+      const comm = o.saasCommission ?? o.commissionAmount ?? (o.totalAmount * 0.10);
+      return `"${o.orderNumber}","${o.cafeName}",${o.tableNumber},"${o.customerName}",${o.subtotal},${o.tax},${o.totalAmount},${comm.toFixed(2)},"${o.status}","${o.createdAt}"`;
+    });
     const blob = new Blob([...headers, rows.join('\n')], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -483,7 +484,7 @@ export const SuperAdminDashboard: React.FC = () => {
                           </td>
 
                           <td className="py-3 px-4 text-right font-mono font-bold text-[#1B5E20] bg-[#E8F5E9]/50">
-                            +₹{order.commissionAmount.toFixed(2)}
+                            +₹{(order.saasCommission ?? order.commissionAmount ?? (order.totalAmount * 0.10)).toFixed(2)}
                           </td>
 
                           <td className="py-3 px-4 text-center">

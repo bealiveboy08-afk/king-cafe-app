@@ -52,6 +52,7 @@ export interface Order {
   tax: number;
   totalAmount: number;
   commissionAmount: number; // 10% commission for SaaS Super Admin
+  saasCommission?: number; // 10% SaaS platform fee saved in Firestore
   status: OrderStatus;
   statusTimestamps: {
     sent: string;
