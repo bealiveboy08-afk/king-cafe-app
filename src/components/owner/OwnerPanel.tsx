@@ -525,14 +525,14 @@ export const OwnerPanel: React.FC = () => {
                       </div>
 
                       {/* Staff Verification & Code Match Section */}
-                      <div className="px-4 py-3 bg-[#F7F3F0] border-t border-[#D7CCC8] space-y-2 text-xs">
-                        {/* Generated code to hand to table */}
-                        <div className="flex items-center justify-between gap-2">
+                      <div className="px-4 py-3 bg-[#FAF5F2] border-t border-[#D7CCC8] space-y-2 text-xs">
+                        {/* 4-Digit Verification Code Display */}
+                        <div className="flex items-center justify-between gap-2 p-2 bg-amber-50/80 border border-amber-200/80 rounded-xl">
                           <div className="flex items-center gap-1.5 text-[#5D4037]">
-                            <KeyRound className="w-3.5 h-3.5 text-[#795548]" />
-                            <span className="font-bold text-[11px]">Staff Code (For Table #{order.tableNumber}):</span>
+                            <KeyRound className="w-4 h-4 text-[#795548]" />
+                            <span className="font-extrabold text-xs">Verification Code:</span>
                           </div>
-                          <span className="px-2.5 py-1 bg-amber-100 border border-amber-300 text-amber-950 font-mono font-black text-xs tracking-wider rounded-lg shadow-2xs">
+                          <span className="px-3 py-1 bg-amber-200/80 border border-amber-300 text-amber-950 font-mono font-black text-sm tracking-widest rounded-lg shadow-2xs">
                             {order.generatedVerificationCode || order.staffVerificationCode || '----'}
                           </span>
                         </div>
@@ -540,27 +540,29 @@ export const OwnerPanel: React.FC = () => {
                         {/* Customer entered code & match indicator */}
                         <div className="flex items-center justify-between gap-2 pt-1 border-t border-[#EAE3DE]">
                           <div className="flex items-center gap-1.5 text-[#5D4037]">
-                            <span className="text-[11px] font-medium">Customer Entered:</span>
+                            <span className="text-[11px] font-bold">Customer Entered:</span>
                           </div>
                           <div>
                             {order.customerEnteredCode ? (
                               <div className="flex items-center gap-1.5">
-                                <span className="px-2 py-0.5 bg-white border border-[#D7CCC8] text-[#3E2723] font-mono font-bold text-xs tracking-wider rounded">
+                                <span className="px-2.5 py-0.5 bg-white border border-[#D7CCC8] text-[#3E2723] font-mono font-black text-xs tracking-wider rounded">
                                   {order.customerEnteredCode}
                                 </span>
                                 {order.generatedVerificationCode && order.customerEnteredCode === order.generatedVerificationCode ? (
-                                  <span className="text-[10px] font-extrabold text-[#1B5E20] bg-[#E8F5E9] border border-[#C8E6C9] px-2 py-0.5 rounded-full">
-                                    ✓ Match
+                                  <span className="text-[10px] font-extrabold text-[#1B5E20] bg-[#E8F5E9] border border-[#C8E6C9] px-2 py-0.5 rounded-full flex items-center gap-1">
+                                    <Check className="w-3 h-3" />
+                                    Code Matched
                                   </span>
                                 ) : (
-                                  <span className="text-[10px] font-bold text-amber-800 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
+                                  <span className="text-[10px] font-bold text-red-700 bg-red-50 border border-red-200 px-2 py-0.5 rounded-full flex items-center gap-1">
+                                    <X className="w-3 h-3" />
                                     Mismatch
                                   </span>
                                 )}
                               </div>
                             ) : (
                               <span className="text-[10px] text-[#8D6E63] italic">
-                                Awaiting customer entry...
+                                Awaiting customer entry on device...
                               </span>
                             )}
                           </div>
@@ -597,7 +599,7 @@ export const OwnerPanel: React.FC = () => {
 
                       {/* Action Buttons Section */}
                       <div className="p-3 bg-[#FAF8F6] border-t border-[#D7CCC8] space-y-2">
-                        {/* Step 1 Action: Accept Order (Match) or Decline Order */}
+                        {/* Step 1 Action: Accept (Code Matched) or Decline Order */}
                         {isPending && (
                           <div className="space-y-1.5">
                             <div className="grid grid-cols-2 gap-2">
@@ -607,7 +609,7 @@ export const OwnerPanel: React.FC = () => {
                                 className="py-2.5 bg-[#2E7D32] hover:bg-[#1B5E20] text-white font-extrabold text-xs rounded-xl shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer"
                               >
                                 <Check className="w-3.5 h-3.5" />
-                                <span>Accept Order (Match)</span>
+                                <span>Accept (Code Matched)</span>
                               </button>
 
                               <button
@@ -616,7 +618,7 @@ export const OwnerPanel: React.FC = () => {
                                 className="py-2.5 bg-white hover:bg-red-50 text-red-700 border border-red-300 font-bold text-xs rounded-xl shadow-2xs transition-all flex items-center justify-center gap-1.5 cursor-pointer"
                               >
                                 <X className="w-3.5 h-3.5" />
-                                <span>Decline Order</span>
+                                <span>Decline</span>
                               </button>
                             </div>
                           </div>

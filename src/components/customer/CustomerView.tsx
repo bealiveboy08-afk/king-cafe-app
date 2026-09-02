@@ -56,6 +56,12 @@ export const CustomerView: React.FC = () => {
 
   // Customer Real Name state
   const [realCustomerName, setRealCustomerName] = useState<string>(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('table')) {
+        return ''; // Table QR scan always starts with blank name
+      }
+    } catch {}
     const raw = customerSession.name || '';
     if (raw === 'Sneha' || raw === 'Sneha Kapoor' || raw.startsWith('Guest (Table') || raw.startsWith('Guest')) {
       return '';
@@ -66,6 +72,12 @@ export const CustomerView: React.FC = () => {
 
   // Table Setup Modal state if customer hasn't provided real name or table yet
   const [tempName, setTempName] = useState<string>(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('table')) {
+        return '';
+      }
+    } catch {}
     const raw = customerSession.name || '';
     if (raw === 'Sneha' || raw === 'Sneha Kapoor' || raw.startsWith('Guest (Table') || raw.startsWith('Guest')) {
       return '';
@@ -84,12 +96,15 @@ export const CustomerView: React.FC = () => {
     return customerSession.tableNumber || 1;
   });
   const [isSettingUpTable, setIsSettingUpTable] = useState<boolean>(() => {
-    const raw = customerSession.name || '';
-    const hasValidName = raw && raw !== 'Sneha' && raw !== 'Sneha Kapoor' && !raw.startsWith('Guest');
     try {
       const params = new URLSearchParams(window.location.search);
-      if (params.get('table') && hasValidName) return false;
+      if (params.get('table')) {
+        // ALWAYS prompt for real name on table QR scan
+        return true;
+      }
     } catch {}
+    const raw = customerSession.name || '';
+    const hasValidName = raw && raw !== 'Sneha' && raw !== 'Sneha Kapoor' && !raw.startsWith('Guest');
     return !customerSession.tableNumber || !hasValidName;
   });
 
@@ -100,34 +115,36 @@ export const CustomerView: React.FC = () => {
     }
   }, [activeCustomerOrder?.id, activeCustomerOrder?.status]);
 
-  // Auto-sync table number from URL query like ?table=1 or ?table=2
+  // Auto-sync table number and clear cached customer name whenever a table QR code URL is opened
   React.useEffect(() => {
     try {
       const urlParams = new URLSearchParams(window.location.search);
       const tableParam = urlParams.get('table');
-      const nameParam = urlParams.get('name');
       if (tableParam) {
         const parsedTable = parseInt(tableParam, 10);
         if (!isNaN(parsedTable)) {
+          // Clear any cached customer name/session from localStorage/sessionStorage
+          localStorage.removeItem('kingcafe_customer_v2');
+          localStorage.removeItem('kingcafe_active_order_id_v2');
+          try {
+            sessionStorage.clear();
+          } catch {}
           setTempTable(parsedTable);
-          const validName = nameParam && nameParam !== 'Sneha' && nameParam !== 'Sneha Kapoor' ? nameParam : '';
-          if (validName) {
-            setTempName(validName);
-            setRealCustomerName(validName);
-          }
+          setTempName('');
+          setRealCustomerName('');
           setCustomerSession({
-            name: validName || (customerSession.name && !customerSession.name.startsWith('Guest') && customerSession.name !== 'Sneha' ? customerSession.name : ''),
+            name: '',
             tableNumber: parsedTable,
           });
-          if (validName) {
-            setIsSettingUpTable(false);
-          }
+          // ALWAYS prompt for real name
+          setIsSettingUpTable(true);
+          setShowStatusScreen(false);
         }
       }
     } catch {
       // ignore
     }
-  }, [customerSession.name, setCustomerSession]);
+  }, [setCustomerSession]);
 
   const categories: ('All' | Category)[] = ['All', 'Pizza', 'Burger', 'Beverages'];
 

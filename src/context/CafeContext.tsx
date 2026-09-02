@@ -166,19 +166,31 @@ export const CafeProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const [customerSession, setCustomerSessionState] = useState<CustomerSession>(() => {
     let tableNum: number | null = null;
-    let name = '';
+    let isTableQrScan = false;
     try {
       const urlParams = new URLSearchParams(window.location.search);
       const tableParam = urlParams.get('table');
-      const nameParam = urlParams.get('name');
       if (tableParam) {
         const parsed = parseInt(tableParam, 10);
-        if (!isNaN(parsed)) tableNum = parsed;
-      }
-      if (nameParam && nameParam !== 'Sneha' && nameParam !== 'Sneha Kapoor') {
-        name = nameParam;
+        if (!isNaN(parsed)) {
+          tableNum = parsed;
+          isTableQrScan = true;
+          // Clear any cached customer name/session whenever a table QR code URL is opened
+          localStorage.removeItem(STORAGE_KEYS.CUSTOMER);
+          localStorage.removeItem(STORAGE_KEYS.ACTIVE_ORDER_ID);
+          try {
+            sessionStorage.clear();
+          } catch {}
+        }
       }
     } catch {}
+
+    if (isTableQrScan) {
+      return {
+        name: '',
+        tableNumber: tableNum || 1,
+      };
+    }
 
     const saved = localStorage.getItem(STORAGE_KEYS.CUSTOMER);
     const parsed = saved ? JSON.parse(saved) : { name: '', tableNumber: null };
@@ -188,12 +200,19 @@ export const CafeProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     return {
-      name: name || savedName || '',
+      name: savedName || '',
       tableNumber: tableNum !== null ? tableNum : (parsed?.tableNumber || 1),
     };
   });
 
   const [customerActiveOrderId, setCustomerActiveOrderIdState] = useState<string | null>(() => {
+    try {
+      const urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.get('table')) {
+        // Table QR code scanned -> start fresh session
+        return null;
+      }
+    } catch {}
     return localStorage.getItem(STORAGE_KEYS.ACTIVE_ORDER_ID) || null;
   });
 
